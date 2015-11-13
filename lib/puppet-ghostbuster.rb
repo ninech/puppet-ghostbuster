@@ -46,20 +46,20 @@ class PuppetGhostbuster
     return configuration.puppetdbserverurl.gsub(/[:\/]/,'_')
   end
 
-  def self.cache
-    "/var/tmp/puppet-ghostbuster.#{puppetdbserverfilename}.cache"
+  def self.cache(name)
+    "/var/tmp/puppet-ghostbuster.#{puppetdbserverfilename}_#{name}.cache"
   end
 
-  def self.update_cache(value)
-    File.open(cache, 'w') do |f|
+  def self.update_cache(name, value)
+    File.open(cache(name), 'w') do |f|
       f.write(value)
     end
     value
   end
 
-  def self.get_cache
-    if File.exists?(cache)
-      JSON.parse(File.read(cache))
+  def self.get_cache(name)
+    if File.exists?(cache(name))
+      JSON.parse(File.read(cache(name)))
     else
       false
     end
@@ -78,7 +78,7 @@ class PuppetGhostbuster
   end
 
   def self.used_classes
-    return get_cache || update_cache(
+    return get_cache('classes') || update_cache('classes',
       client.request(
         'resources',
         [:'=', 'type', 'Class'],
