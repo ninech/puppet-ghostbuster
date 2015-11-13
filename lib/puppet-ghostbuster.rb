@@ -88,6 +88,19 @@ class PuppetGhostbuster
     )
   end
 
+  def self.used_files
+    return get_cache('files') || update_cache('files',
+      client.request(
+        'resources',
+        [:'=', 'type', 'File'],
+      ).data.select { |file|
+        file['parameters']['source'] =~ /^puppet:\/\//
+      }.map { |resource|
+        [resource['parameters']['source'], resource['parameters']['recurse'] || false]
+      }.uniq
+    )
+  end
+
   def find_unused_classes
     @@logger.info 'Now trying to find unused classes'
     manifests.each do |file|
@@ -142,26 +155,19 @@ class PuppetGhostbuster
 
   def find_unused_files
     @@logger.info 'Now trying to find unused files'
-    files.each do |file|
-      next unless File.file?(file)
-      module_name, file_name = file.match(/.*\/([^\/]+)\/files\/(.+)$/).captures
-      count = 0
-      Dir["#{path}"].each do |caller_file|
-        next unless File.file?(caller_file)
-        begin
-          if caller_file =~ /\.pp$/
-            if match = caller_file.match(/.*\/([^\/]+)\/manifests\/.+$/)
-              manifest_module_name = match.captures[0]
-              if manifest_module_name == module_name
-                count += File.readlines(caller_file).grep(/["']\$\{module_name\}\/#{file_name}["']/).size
-              end
-            end
-          end
-          count += File.readlines(caller_file).grep(/#{module_name}\/#{file_name}/).size
-        rescue ArgumentError
-        end
+    unused_file = files
+    self.class.used_files.each do |file,recurse|
+      match = file.match(/^puppet:\/\/.*\/modules\/(.+)$/)
+      next unless match
+      filepath = match.captures[0]
+      if recurse
+        unused_file.delete_if { |f| Regexp.compile("/files/#{filepath}/.*").match(f) }
+      else
+        unused_file.delete_if { |f| Regexp.compile("/files/#{filepath}$").match(f) }
       end
-      puts "File #{file} not used" if count == 0
+    end
+    unused_file.each do |file|
+      puts "File #{file} not used"
     end
   end
 
